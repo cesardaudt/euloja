@@ -86,6 +86,12 @@ class UserBase extends DataBase {
 		print_r($this->pdo->errorInfo());
 		return TRUE;
 	}
+
+	function dumpAllUsers() {
+		# DEBUG.
+
+		return $this->pdo->query('SELECT * FROM Users')->fetchAll();
+	}
 }
 
 class ProductBase extends DataBase{
@@ -126,6 +132,14 @@ class MainController {
 			case 'addUserSubmit':
 				$this->addUserSubmit();
 				break;
+
+			case 'dumpAllUsers':
+				### DEBUG!!
+				echo "<PRE>";
+				print_r($this->userBase->dumpAllUsers());
+				echo "</PRE>";
+				break;
+
 			case 'home':
 				$this->home();
 				break;
@@ -139,6 +153,7 @@ class MainController {
 		?>
 			<UL>
 				<LI><A HREF="loucamente.php?action=addUserForm">Adicionar usuário</A>
+				<LI><A HREF="loucamente.php?action=dumpAllUsers">Dump all users (DEBUG)</A>
 			</UL>
 		<?php
 	}
@@ -228,7 +243,7 @@ class MainController {
 <HTML>
 <HEAD>
 	<META HTTP-EQUIV="Content-type" CONTENT="text/html; charset=UTF-8">
-	<TITLE>µµµ</TITLE>
+	<TITLE>Euloja</TITLE>
 </HEAD>
 <BODY>
 <?php
