@@ -121,10 +121,30 @@ class MainController {
 			$_SESSION['session'] = new Session();
 		$this->session = $_SESSION['session'];
 
+		if (isset($_REQUEST['loginAction']))
+			$loginAction = $_REQUEST['loginAction'];
+		else
+			$loginAction = 'none';
+
 		if (isset($_REQUEST['action']))
 			$action = $_REQUEST['action'];
 		else
 			$action = 'home';
+
+		switch ($loginAction) {
+			case 'login':
+				$login = new LoginController($this->userBase, $action);
+				$user = $login->authenticate();
+				if ($user)
+					$this->session->userEmail = $user->email;
+				else
+					return;  ## Bad!!
+				break;
+
+			case 'logout':
+				$this->session->userEmail = NULL;
+				break;
+		}
 
 		switch ($action) {
 			#case 'validateLogin':
@@ -141,13 +161,7 @@ class MainController {
 
 			# This is really not an action, but rather a 'pre-action', i.e.,
 			# something you execute prior to an actual action. Shall be changed.
-			case 'loginForm':
-				$login = new LoginController($this->userBase);
-				$user = $login->authenticate();
-				if ($user)
-					$this->session->userEmail = $user->email;
-				break;
-
+			#case 'loginForm':
 
 			case 'dumpAllUsers':
 				### DEBUG!!
@@ -175,7 +189,8 @@ class MainController {
 			<UL>
 				<LI><A HREF="loucamente.php?action=addUserForm">Adicionar usuário</A>
 				<LI><A HREF="loucamente.php?action=dumpAllUsers">Dump all users (DEBUG)</A>
-				<LI><A HREF="loucamente.php?action=loginForm">Login</A>
+				<LI><A HREF="loucamente.php?action=home&loginAction=login">Login</A>
+				<LI><A HREF="loucamente.php?action=home&loginAction=logout">Logout</A>
 			</UL>
 		<?php
 	}
@@ -295,8 +310,7 @@ class Attribute {
 
 class UIForm {
 	public $attributes = Array();
-	public $actionBase = 'loucamente.php';
-	public $targetAction;
+	public $action;
 
 	function addAttribute($attr) {
 		// Assuming PHP will keep array order.
@@ -310,7 +324,7 @@ class UIForm {
 	}
 
 	function printHTML() {
-		echo "<FORM ACTION='{$this->actionBase}?action={$this->targetAction}' METHOD='POST'>\n";
+		echo "<FORM ACTION='{$this->action}' METHOD='POST'>\n";
 		echo "<TABLE>\n";
 		foreach ($this->attributes as $attr) {
 			$attr->printHTML();
@@ -322,10 +336,11 @@ class UIForm {
 }
 
 class LoginForm extends UIForm {
-	public $targetAction = 'loginForm';
+	public $action;
 	public $errorStatus = NULL;
 
 	function __construct($errorStatus=NULL) {
+		$this->action = $_SERVER['REQUEST_URI'];  // Half-bad.
 		$this->addAttribute(new Attribute("email", "E-mail"));
 		$this->addAttribute(new Attribute("password", "Password", "password"));
 	}
