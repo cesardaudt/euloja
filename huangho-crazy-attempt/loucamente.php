@@ -1,5 +1,4 @@
 <?php
-# This is getting more and more horrible. Will refactor Real Soon Now.
 
 error_reporting(E_ALL | E_STRICT);
 session_start();
