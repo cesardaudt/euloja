@@ -1,5 +1,5 @@
 <?php
-
+# This is getting more and more horrible. Will refactor Real Soon Now.
 
 error_reporting(E_ALL | E_STRICT);
 
@@ -68,6 +68,23 @@ class UserBase extends DataBase {
 		$query = $this->pdo->prepare('SELECT * from Users where cpf = :cpf');
 		$query->execute(Array(':cpf' => $cpf));
 		return $query->fetchObject('User');
+	}
+
+	function addUser($user) {
+		$colon_keys = Array();
+		$keys = Array();
+		$values = Array();
+		foreach (get_object_vars($user) as $key => $value) {
+			array_push($keys, $key);
+			array_push($colon_keys, ":$key");
+			$values[":$key"] = $value;
+		}
+
+
+		$query = $this->pdo->prepare('INSERT INTO Users (' . implode(",", $keys) . ') VALUES (' . implode(",", $colon_keys) . ')');
+		$query->execute($values);
+		print_r($this->pdo->errorInfo());
+		return TRUE;
 	}
 }
 
@@ -150,18 +167,60 @@ class MainController {
 	}
 
 	function addUserForm() {
+		# This should also have a controller. This should really be a plain old procedure.
+
 		?>
-		<FORM ACTION="loucamente.html?action=addUserSubmit" METHOD="post">
+		<FORM ACTION="loucamente.php?action=addUserSubmit" METHOD="post">
 			<TABLE>
 				<?php
-					foreach (Array('name'=>'Nome', 'email'=>'E-mail', 'cpf'=>'CPF', 'address'=>'Endereço', 'phone'=>'Telefone') as $key => $label)
+					foreach (Array('name'=>'Nome', 'email'=>'E-mail', 'cpf'=>'CPF', 'address'=>'Endereço', 'phone'=>'Telefone', 'password'=>'Senha', 'confirm_password'=>'Mais senha') as $key => $label)
 						echo "<TR><TD>$label<TD><INPUT TYPE='text' NAME='$key'>\n"
 				?>
+
 			</TABLE>
+			<INPUT TYPE="submit" VALUE="Manda bala">
 		</FORM>
 		<?php
 	}
+
+	function addUserSubmit() {
+		# TODO: Validate all things.
+
+		# Does the user already exist?
+		if ($this->userBase->findUserByEmail($_REQUEST['email'])) {
+			echo "User already exists by that e-mail.\n";
+			return FALSE;
+		}
+
+		if ($this->userBase->findUserByCPF($_REQUEST['cpf'])) {
+			echo "User already exists by that CPF.\n";
+			return FALSE;
+		}
+
+		# TODO: Have a decent constructor.
+		$user = new User();
+		$user->name = $_REQUEST['name'];
+		$user->email = $_REQUEST['email'];
+		$user->cpf = $_REQUEST['cpf'];
+		$user->address = $_REQUEST['address'];
+		$user->phone = $_REQUEST['phone'];
+		$user->password = $_REQUEST['password'];
+
+
+		if ($this->userBase->addUser($user)) {
+			echo "User added.\n";
+			return TRUE;
+		}
+		else {
+			echo "User addition failed!\n";
+			return FALSE;
+		}
+	
+	
+	}
+
 }
+
 
 
 ?>
