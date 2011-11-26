@@ -76,8 +76,8 @@ class ProductBase extends DataBase{
 }
 
 function getCurrentAuthData() {
-	if ($_SERVER['email'])
-		return (object) Array('email' => $_SERVER['email'], 'password' => $_SERVER['password']);
+	if ($_REQUEST['email'])
+		return (object) Array('email' => $_REQUEST['email'], 'password' => $_REQUEST['password']);
 	else
 		return NULL;
 }
@@ -101,11 +101,26 @@ class MainController {
 			$_SESSION['session'] = new Session();
 		$this->session = $_SESSION['session'];
 
-		if (isset($_SERVER['action']))
-			$action = $_SERVER['action'];
+		if (isset($_REQUEST['action']))
+			$action = $_REQUEST['action'];
 		else
 			$action = 'home';
 
+		switch ($action) {
+			case 'validateLogin':
+				$this->validateLogin();
+				break;
+			case 'home':
+				echo "Home!\n";
+				break;
+			default:
+				echo "WTF is $action?\n";
+		}
+
+	}
+
+	function validateLogin() {
+		echo "No!\n";
 	}
 }
 
