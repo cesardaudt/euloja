@@ -2,6 +2,7 @@
 # This is getting more and more horrible. Will refactor Real Soon Now.
 
 error_reporting(E_ALL | E_STRICT);
+session_start();
 
 # Magic quoting sucks.
 function unquote($txt) {
@@ -115,7 +116,7 @@ class MainController {
 	function init() {
 		if (!isset($_SESSION['session']))
 			$_SESSION['session'] = new Session();
-		$this->session = $_SESSION['session'];
+		#$this->session = $_SESSION['session'];
 
 		if (isset($_REQUEST['action']))
 			$action = $_REQUEST['action'];
@@ -150,6 +151,11 @@ class MainController {
 	}
 
 	function home() {
+		if ($_SESSION['userEmail'])
+			echo "Logged in as " . $_SESSION['userEmail'] . "\n";
+		else
+			echo "Not logged in.\n";
+
 		?>
 			<UL>
 				<LI><A HREF="loucamente.php?action=addUserForm">Adicionar usuário</A>
@@ -167,7 +173,8 @@ class MainController {
 		if ($user) {
 			if ($user->password == $password) {
 				# Ai, encryption, µµµ.
-				$this->session->userEmail = $user->email;
+				$_SESSION['userEmail'] = $user->email;
+				echo "Thou loggedst! <A HREF='loucamente.php'>Home</A>\n";
 				return TRUE;
 			}
 			else {
