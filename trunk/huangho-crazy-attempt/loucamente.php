@@ -53,6 +53,8 @@ class DataBase {
 
 
 class UserBase extends DataBase {
+	// FIXME: UserBase and ProductBase are really one single database.
+
 	function __construct() {
 		$this->pdo = new PDO('sqlite:users.sqlite');
 		$this->createTable('Users', array_keys(get_class_vars('User')));
@@ -125,9 +127,11 @@ class MainController {
 			$action = 'home';
 
 		switch ($action) {
-			case 'validateLogin':
-				$this->validateLogin();
-				break;
+			#case 'validateLogin':
+			#	$this->validateLogin();
+			#	break;
+
+			# These will be merged and moved out to a controller.
 			case 'addUserForm':
 				$this->addUserForm();
 				break;
@@ -135,6 +139,8 @@ class MainController {
 				$this->addUserSubmit();
 				break;
 
+			# This is really not an action, but rather a 'pre-action', i.e.,
+			# something you execute prior to an actual action. Shall be changed.
 			case 'loginForm':
 				$login = new LoginController($this->userBase);
 				$user = $login->authenticate();
@@ -169,33 +175,35 @@ class MainController {
 			<UL>
 				<LI><A HREF="loucamente.php?action=addUserForm">Adicionar usuário</A>
 				<LI><A HREF="loucamente.php?action=dumpAllUsers">Dump all users (DEBUG)</A>
+				<LI><A HREF="loucamente.php?action=loginForm">Login</A>
 			</UL>
 		<?php
 	}
 
-	function validateLogin() {
-		# TODO: There should probably be an AuthController of sorts.
-		$email = $_REQUEST['email'];
-		$password = $_REQUEST['password'];
-
-		$user = $this->userBase->findUserByEmail($email);
-		if ($user) {
-			if ($user->password == $password) {
-				# Ai, encryption, µµµ.
-				$this->session->userEmail = $user->email;
-				echo "Thou loggedst! <A HREF='loucamente.php'>Home</A>\n";
-				return TRUE;
-			}
-			else {
-				echo "Wrong pass\n";
-			}
-		}
-		else {
-			echo "Non-existent user\n";
-		}
-
-		return FALSE;
-	}
+	#function validateLogin() {
+	#	# TODO: There should probably be an AuthController of sorts.
+	#	# -> Now there is.
+	#	$email = $_REQUEST['email'];
+	#	$password = $_REQUEST['password'];
+	#
+	#	$user = $this->userBase->findUserByEmail($email);
+	#	if ($user) {
+	#		if ($user->password == $password) {
+	#			# Ai, encryption, µµµ.
+	#			$this->session->userEmail = $user->email;
+	#			echo "Thou loggedst! <A HREF='loucamente.php'>Home</A>\n";
+	#			return TRUE;
+	#		}
+	#		else {
+	#			echo "Wrong pass\n";
+	#		}
+	#	}
+	#	else {
+	#		echo "Non-existent user\n";
+	#	}
+	#
+	#	return FALSE;
+	#}
 
 	function addUserForm() {
 		# This should also have a controller. This should really be a plain old procedure.
