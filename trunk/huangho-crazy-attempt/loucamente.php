@@ -131,8 +131,14 @@ class MainController {
 		else
 			$action = 'home';
 
+		// Check for a pending login action.
 		switch ($loginAction) {
 			case 'login':
+				# TODO: is loginAction is 'login' and user is already logged in,
+				# it might be better to just ignore the preaction, so that actions
+				# that require logging in can safely set loginAction to 'login',
+				# whether or not the user is already logged in. Yea?
+
 				$login = new LoginController($this->userBase, $action);
 				$user = $login->authenticate();
 				if ($user)
@@ -146,17 +152,16 @@ class MainController {
 				break;
 		}
 
+		// Then perform the main action.
 		switch ($action) {
 			#case 'validateLogin':
 			#	$this->validateLogin();
 			#	break;
 
 			# These will be merged and moved out to a controller.
-			case 'addUserForm':
-				$this->addUserForm();
-				break;
-			case 'addUserSubmit':
-				$this->addUserSubmit();
+			case 'addUser':
+				$addUser = new AddUserController($this->userBase);
+				$addUser->act();
 				break;
 
 			# This is really not an action, but rather a 'pre-action', i.e.,
@@ -181,96 +186,18 @@ class MainController {
 
 	function home() {
 		if ($this->session->userEmail)
-			echo "Logged in as " . $this->session->userEmail . "\n";
+			echo "<P>Logged in as " . $this->session->userEmail . "\n";
 		else
-			echo "Not logged in.\n";
+			echo "<P>Not logged in.\n";
 
 		?>
 			<UL>
-				<LI><A HREF="loucamente.php?action=addUserForm">Adicionar usuário</A>
+				<LI><A HREF="loucamente.php?action=addUser">Adicionar usuário</A>
 				<LI><A HREF="loucamente.php?action=dumpAllUsers">Dump all users (DEBUG)</A>
 				<LI><A HREF="loucamente.php?action=home&loginAction=login">Login</A>
 				<LI><A HREF="loucamente.php?action=home&loginAction=logout">Logout</A>
 			</UL>
 		<?php
-	}
-
-	#function validateLogin() {
-	#	# TODO: There should probably be an AuthController of sorts.
-	#	# -> Now there is.
-	#	$email = $_REQUEST['email'];
-	#	$password = $_REQUEST['password'];
-	#
-	#	$user = $this->userBase->findUserByEmail($email);
-	#	if ($user) {
-	#		if ($user->password == $password) {
-	#			# Ai, encryption, µµµ.
-	#			$this->session->userEmail = $user->email;
-	#			echo "Thou loggedst! <A HREF='loucamente.php'>Home</A>\n";
-	#			return TRUE;
-	#		}
-	#		else {
-	#			echo "Wrong pass\n";
-	#		}
-	#	}
-	#	else {
-	#		echo "Non-existent user\n";
-	#	}
-	#
-	#	return FALSE;
-	#}
-
-	function addUserForm() {
-		# This should also have a controller. This should really be a plain old procedure.
-
-		?>
-		<FORM ACTION="loucamente.php?action=addUserSubmit" METHOD="post">
-			<TABLE>
-				<?php
-					foreach (Array('name'=>'Nome', 'email'=>'E-mail', 'cpf'=>'CPF', 'address'=>'Endereço', 'phone'=>'Telefone', 'password'=>'Senha', 'confirm_password'=>'Mais senha') as $key => $label)
-						echo "<TR><TD>$label<TD><INPUT TYPE='text' NAME='$key'>\n"
-				?>
-
-			</TABLE>
-			<INPUT TYPE="submit" VALUE="Manda bala">
-		</FORM>
-		<?php
-	}
-
-	function addUserSubmit() {
-		# TODO: Validate all things.
-
-		# Does the user already exist?
-		if ($this->userBase->findUserByEmail($_REQUEST['email'])) {
-			echo "User already exists by that e-mail.\n";
-			return FALSE;
-		}
-
-		if ($this->userBase->findUserByCPF($_REQUEST['cpf'])) {
-			echo "User already exists by that CPF.\n";
-			return FALSE;
-		}
-
-		# TODO: Have a decent constructor.
-		$user = new User();
-		$user->name = $_REQUEST['name'];
-		$user->email = $_REQUEST['email'];
-		$user->cpf = $_REQUEST['cpf'];
-		$user->address = $_REQUEST['address'];
-		$user->phone = $_REQUEST['phone'];
-		$user->password = $_REQUEST['password'];
-
-
-		if ($this->userBase->addUser($user)) {
-			echo "User added.\n";
-			return TRUE;
-		}
-		else {
-			echo "User addition failed!\n";
-			return FALSE;
-		}
-	
-	
 	}
 
 }
@@ -311,6 +238,11 @@ class Attribute {
 class UIForm {
 	public $attributes = Array();
 	public $action;
+	public $errors = Array();
+
+	function __construct() {
+		$this->action = $_SERVER['REQUEST_URI'];  // Half-bad.
+	}
 
 	function addAttribute($attr) {
 		// Assuming PHP will keep array order.
@@ -323,9 +255,18 @@ class UIForm {
 		return $this->attributes[$key]->value;
 	}
 
+	function addError($error) {
+		array_push($this->errors, $error);
+	}
+
 	function printHTML() {
 		echo "<FORM ACTION='{$this->action}' METHOD='POST'>\n";
 		echo "<TABLE>\n";
+
+		foreach ($this->errors as $error) {
+			echo "<P>ERRO: $error";
+		}
+
 		foreach ($this->attributes as $attr) {
 			$attr->printHTML();
 		}
@@ -333,14 +274,25 @@ class UIForm {
 		echo "<INPUT TYPE='Submit' VALUE='Manda bala'>\n";
 		echo "</FORM>\n";
 	}
+
+	function checkMandatory() {
+		$allOK = TRUE;
+		foreach ($this->attributes as $attr) {
+			if ($attr->isMandatory && !$this->getAttributeValue($attr->key)) {
+				# TODO: Perhaps separate check logic from messages?
+				$this->addError("Campo '{$attr->label}' é obrigatório!");
+				$allOK = FALSE;
+			}
+		}
+		return $allOK;
+	}
 }
 
 class LoginForm extends UIForm {
-	public $action;
 	public $errorStatus = NULL;
 
 	function __construct($errorStatus=NULL) {
-		$this->action = $_SERVER['REQUEST_URI'];  // Half-bad.
+		parent::__construct();
 		$this->addAttribute(new Attribute("email", "E-mail"));
 		$this->addAttribute(new Attribute("password", "Password", "password"));
 	}
@@ -383,6 +335,85 @@ class LoginController {
 		$this->ui->printHTML();
 	}
 
+}
+
+class AddUserForm extends UIForm {
+	public $errorStatus;
+
+	function __construct() {
+		parent::__construct();
+		$this->action .= "&mid_action=1"; // This is just horrible.
+		$this->addAttribute(new Attribute('name', "Nome completo", 'text', TRUE));
+		$this->addAttribute(new Attribute('cpf', "CPF", 'text', TRUE));
+		$this->addAttribute(new Attribute('email', "E-mail", 'text', TRUE));
+		$this->addAttribute(new Attribute('address', "Endereço", 'text', TRUE));
+		$this->addAttribute(new Attribute('phone', "Telefone", 'text', TRUE));
+		$this->addAttribute(new Attribute('password', "Senha", 'password', TRUE));
+		$this->addAttribute(new Attribute('password_confirmation', "Confirme a senha", 'password', TRUE));
+	}
+
+	function printHTML() {
+		if ($this->errorStatus) {
+			echo "<P>Error adding user: {$this->errorStatus}\n";
+		}
+		parent::printHTML();
+	}
+}
+
+class AddUserController {
+	public $ui;
+	public $userBase;
+
+	function __construct($userBase) {
+		$this->ui = new AddUserForm();
+		$this->userBase = $userBase;
+	}
+
+	function act() {
+		if (isset($_REQUEST['mid_action'])) {
+			if ($this->validate()) {
+				# TODO: Have a decent constructor.
+				$user = new User();
+				$user->name = $this->ui->getAttributeValue('name');
+				$user->email = $this->ui->getAttributeValue('email');
+				$user->cpf = $this->ui->getAttributeValue('cpf');
+				$user->address = $this->ui->getAttributeValue('address');
+				$user->phone = $this->ui->getAttributeValue('phone');
+				$user->password = $this->ui->getAttributeValue('password');
+				if ($this->userBase->addUser($user)) {
+					echo "<P>Yay! <A HREF='loucamente.php?action=home'>Home</A>";
+					return TRUE;
+				}
+				else {
+					echo "Fail!\n";
+				}
+			}
+		}
+		$this->ui->printHTML();
+	}
+
+	function validate() {
+		$this->ui->checkMandatory();
+
+		# We check this here, rather than in addUser, because we want to inform
+		# the user as soon as possible that his/her CPF/e-mail is already registered.
+		$email=""; $cpf="";
+		if (($cpf = $this->ui->getAttributeValue('cpf')) && $this->userBase->findUserByCPF($cpf))
+			$this->ui->addError("CPF já cadastrado!");
+
+		if (($email = $this->ui->getAttributeValue('email')) && $this->userBase->findUserByEmail($email))
+			$this->ui->addError("E-mail já cadastrado!");
+
+
+		$pass1 = $this->ui->getAttributeValue('password');
+		$pass2 = $this->ui->getAttributeValue('password_confirmation');
+		if ($pass1 != $pass2) {
+			$this->ui->addError("Senha e confirmação não casam!");
+			return FALSE;
+		}
+
+		return (count($this->ui->errors) == 0);
+	}
 }
 
 ?>
