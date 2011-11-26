@@ -12,11 +12,11 @@ function unquote($txt) {
 }
 
 class User {
-	public $cpf;       # String; primary key (não cabe num int, nem inventem)
+	public $email;     # String; primary key
+	public $cpf;       # String (não cabe num int, nem inventem)
 	public $name;      # String
 	public $address;   # String
 	public $phone;     # String
-	public $email;     # String
 	public $password;  # String
 
 	public $bankName;
@@ -75,15 +75,8 @@ class ProductBase extends DataBase{
 	// µµµ.
 }
 
-function getCurrentAuthData() {
-	if ($_REQUEST['email'])
-		return (object) Array('email' => $_REQUEST['email'], 'password' => $_REQUEST['password']);
-	else
-		return NULL;
-}
-
 class Session {
-	public $user;
+	public $userEmail;
 }
 
 class MainController {
@@ -110,8 +103,14 @@ class MainController {
 			case 'validateLogin':
 				$this->validateLogin();
 				break;
+			case 'addUserForm':
+				$this->addUserForm();
+				break;
+			case 'addUserSubmit':
+				$this->addUserSubmit();
+				break;
 			case 'home':
-				echo "Home!\n";
+				$this->home();
 				break;
 			default:
 				echo "WTF is $action?\n";
@@ -119,8 +118,48 @@ class MainController {
 
 	}
 
+	function home() {
+		?>
+			<UL>
+				<LI><A HREF="loucamente.php?action=addUserForm">Adicionar usuário</A>
+			</UL>
+		<?php
+	}
+
 	function validateLogin() {
-		echo "No!\n";
+		# TODO: There should probably be an AuthController of sorts.
+		$email = $_REQUEST['email'];
+		$password = $_REQUEST['password'];
+
+		$user = $this->userBase->findUserByEmail($email);
+		if ($user) {
+			if ($user->password == $password) {
+				# Ai, encryption, µµµ.
+				$this->session->userEmail = $user->email;
+				return TRUE;
+			}
+			else {
+				echo "Wrong pass\n";
+			}
+		}
+		else {
+			echo "Non-existent user\n";
+		}
+
+		return FALSE;
+	}
+
+	function addUserForm() {
+		?>
+		<FORM ACTION="loucamente.html?action=addUserSubmit" METHOD="post">
+			<TABLE>
+				<?php
+					foreach (Array('name'=>'Nome', 'email'=>'E-mail', 'cpf'=>'CPF', 'address'=>'Endereço', 'phone'=>'Telefone') as $key => $label)
+						echo "<TR><TD>$label<TD><INPUT TYPE='text' NAME='$key'>\n"
+				?>
+			</TABLE>
+		</FORM>
+		<?php
 	}
 }
 
