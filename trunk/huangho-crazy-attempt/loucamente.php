@@ -81,6 +81,7 @@ class UserBase extends DataBase {
 			$values[":$key"] = $value;
 		}
 
+		# TODO: Esse cara deveria verificar se user já existe, não o addUserSubmit.
 
 		$query = $this->pdo->prepare('INSERT INTO Users (' . implode(",", $keys) . ') VALUES (' . implode(",", $colon_keys) . ')');
 		$query->execute($values);
@@ -116,7 +117,7 @@ class MainController {
 	function init() {
 		if (!isset($_SESSION['session']))
 			$_SESSION['session'] = new Session();
-		#$this->session = $_SESSION['session'];
+		$this->session = $_SESSION['session'];
 
 		if (isset($_REQUEST['action']))
 			$action = $_REQUEST['action'];
@@ -133,6 +134,14 @@ class MainController {
 			case 'addUserSubmit':
 				$this->addUserSubmit();
 				break;
+
+			case 'loginForm':
+				$login = new LoginController($this->userBase);
+				$user = $login->authenticate();
+				if ($user)
+					$this->session->userEmail = $user->email;
+				break;
+
 
 			case 'dumpAllUsers':
 				### DEBUG!!
@@ -151,8 +160,8 @@ class MainController {
 	}
 
 	function home() {
-		if ($_SESSION['userEmail'])
-			echo "Logged in as " . $_SESSION['userEmail'] . "\n";
+		if ($this->session->userEmail)
+			echo "Logged in as " . $this->session->userEmail . "\n";
 		else
 			echo "Not logged in.\n";
 
@@ -173,7 +182,7 @@ class MainController {
 		if ($user) {
 			if ($user->password == $password) {
 				# Ai, encryption, µµµ.
-				$_SESSION['userEmail'] = $user->email;
+				$this->session->userEmail = $user->email;
 				echo "Thou loggedst! <A HREF='loucamente.php'>Home</A>\n";
 				return TRUE;
 			}
@@ -244,6 +253,114 @@ class MainController {
 }
 
 
+
+
+
+///--- This is how the world should be (almost). ----------
+
+class Attribute {
+	public $key;
+	public $label;
+	public $defaultValue;
+	public $value;
+	public $isMandatory;
+
+	function __construct($key, $label, $type='text', $isMandatory=FALSE, $defaultValue=NULL) {
+		$this->key = $key;
+		$this->label = $label;
+		$this->type = $type;
+		$this->defaultValue = $defaultValue;
+		$this->isMandatory = $isMandatory;
+
+		# Questionable.
+		if (isset($_REQUEST[$key]))
+			$this->value = unquote($_REQUEST[$key]);
+		else
+			$this->value = $this->defaultValue;
+	}
+
+	function printHTML() {
+		$value = htmlspecialchars($this->value, ENT_QUOTES);
+		echo "<TR><TD>{$this->label}<TD><INPUT TYPE='{$this->type}' NAME='{$this->key}' VALUE='$value'>\n";
+	}
+}
+
+class UIForm {
+	public $attributes = Array();
+	public $actionBase = 'loucamente.php';
+	public $targetAction;
+
+	function addAttribute($attr) {
+		// Assuming PHP will keep array order.
+		$this->attributes[$attr->key] = $attr;
+		
+		// Cannot use call_user_func_array with constructor. (Why not? You can't, that's why.)
+	}
+
+	function getAttributeValue($key) {
+		return $this->attributes[$key]->value;
+	}
+
+	function printHTML() {
+		echo "<FORM ACTION='{$this->actionBase}?action={$this->targetAction}' METHOD='POST'>\n";
+		echo "<TABLE>\n";
+		foreach ($this->attributes as $attr) {
+			$attr->printHTML();
+		}
+		echo "</TABLE>\n";
+		echo "<INPUT TYPE='Submit' VALUE='Manda bala'>\n";
+		echo "</FORM>\n";
+	}
+}
+
+class LoginForm extends UIForm {
+	public $targetAction = 'loginForm';
+	public $errorStatus = NULL;
+
+	function __construct($errorStatus=NULL) {
+		$this->addAttribute(new Attribute("email", "E-mail"));
+		$this->addAttribute(new Attribute("password", "Password", "password"));
+	}
+
+	function printHTML() {
+		if ($this->errorStatus) {
+			echo "<P>Erro de autenticação: {$this->errorStatus}";
+		}
+		parent::printHTML();
+	}
+}
+
+class LoginController {
+	public $ui;
+	public $userBase;
+
+	function __construct($userBase) {
+		$this->ui = new LoginForm();
+		$this->userBase = $userBase;
+	}
+
+	function authenticate() {
+		if ($email = $this->ui->getAttributeValue('email')) {
+			// We are mid-login.
+			$user = $this->userBase->findUserByEmail($email);
+			if ($user) {
+				$formPassword = $this->ui->getAttributeValue('password');
+				if ($user->password == $formPassword) {
+					return $user;
+				}
+				else {
+					$this->ui->errorStatus = 'WRONG_PASSWORD';
+				}
+			}
+			else {
+				$this->ui->errorStatus = 'UNKNOWN_USER';
+			}
+		}
+
+		$this->ui->printHTML();
+	}
+
+}
 
 ?>
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
