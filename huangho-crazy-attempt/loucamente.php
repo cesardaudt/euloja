@@ -153,19 +153,10 @@ class MainController {
 
 		// Then perform the main action.
 		switch ($action) {
-			#case 'validateLogin':
-			#	$this->validateLogin();
-			#	break;
-
-			# These will be merged and moved out to a controller.
 			case 'addUser':
 				$addUser = new AddUserController($this->userBase);
 				$addUser->act();
 				break;
-
-			# This is really not an action, but rather a 'pre-action', i.e.,
-			# something you execute prior to an actual action. Shall be changed.
-			#case 'loginForm':
 
 			case 'dumpAllUsers':
 				### DEBUG!!
@@ -177,6 +168,7 @@ class MainController {
 			case 'home':
 				$this->home();
 				break;
+
 			default:
 				echo "WTF is $action?\n";
 		}
@@ -201,12 +193,7 @@ class MainController {
 
 }
 
-
-
-
-
-///--- This is how the world should be (almost). ----------
-
+// HTML form attribute.
 class Attribute {
 	public $key;
 	public $label;
