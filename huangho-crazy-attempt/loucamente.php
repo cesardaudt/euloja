@@ -70,7 +70,39 @@ class Cart {
 	function hasItem($id) {
 		return in_array($id, $this->items);
 	}
+
+	function reset() {
+		$this->items = Array();
+	}
 }
+
+
+// "Pedido" (conjunto de transações do mesmo carrinho)
+class Order {
+	public $id;
+	public $buyerId;
+	public $time;
+
+	function __construct($buyerId, $time) {
+		$this->buyerId = $buyerId;
+		$this->time = $time;
+	}
+}
+
+// Transação de um produto individual.
+class Transaction {
+	public $id;
+	public $productId;
+	public $orderId;
+	public $status;    # waitingPayment, waitingShipment, waitingConfirmation, concluded
+
+	function __construct($productId, $orderId, $status) {
+		$this->productId = $productId;
+		$this->orderId = $orderId;
+		$this->status = $status;
+	}
+}
+
 
 class DataBase {
 	public $pdo;
@@ -131,6 +163,8 @@ class EulojaBase extends DataBase {
 		$this->pdo = new PDO('sqlite:dbase.sqlite');
 		$this->createTable('Users', array_keys(get_class_vars('User')));
 		$this->createTable('Products', array_keys(get_class_vars('Product')));
+		$this->createTable('Orders', array_keys(get_class_vars('Order')));
+		$this->createTable('Transactions', array_keys(get_class_vars('Transaction')));
 
 		print_r($this->pdo->errorInfo());
 	}
@@ -159,6 +193,14 @@ class EulojaBase extends DataBase {
 
 	function addProduct($product) {
 		return $this->insertInto('Products', $product);
+	}
+
+	function addOrder($order) {
+		return $this->insertInto('Orders', $order);
+	}
+
+	function addTransaction($transaction) {
+		return $this->insertInto('Transactions', $transaction);
 	}
 
 
@@ -260,6 +302,10 @@ class MainController {
 				print_r($this->dbase->dumpTable('Users'));
 				echo "<H3>Products</H3>\n";
 				print_r($this->dbase->dumpTable('Products'));
+				echo "<H3>Orders</H3>\n";
+				print_r($this->dbase->dumpTable('Orders'));
+				echo "<H3>Transactions</H3>\n";
+				print_r($this->dbase->dumpTable('Transactions'));
 				echo "</PRE>";
 				break;
 
@@ -765,16 +811,33 @@ class FinishShoppingController {
 		$this->dbase = $dbase;
 		$this->session = $session;
 		$this->ui = new FinishShoppingUI();
+		$this->products = Array();
 	}
 
 	function act() {
 		foreach ($this->session->cart->getItems() as $id) {
 			$product = $this->dbase->findProductById($id);
-			$this->ui->products[] = $product;
+			$this->products[] = $product;
 		}
 
+		$this->ui->products = $this->products;
 
-		$this->ui->printHTML();
+		if ($this->ui->inMidAction()) {
+			# In another world, we would have the credit card information
+			# from the buyer. Then we would validate it, and only then
+			# register the transaction. But this is not another world.
+
+			$orderId = $this->dbase->addOrder(new Order($this->session->userEmail, time())); // Every time I see you falling...
+			foreach ($this->products as $product)
+				$this->dbase->addTransaction(new Transaction($product->id, $orderId, 'waitingPayment'));
+
+			echo "Yea! (orderId = $orderId)\n";
+			$this->session->cart->reset();
+		}
+		else {
+			$this->ui->printHTML();
+		}
+
 	}
 }
 
@@ -791,6 +854,12 @@ class FinishShoppingUI {
 
 		echo "</UL>\n";
 		echo "<P>[Inserte formulário com opções de pagamento aquí]\n";
+		echo "<P><A HREF='loucamente.php?action=finishShopping&mid_action=1'>[Manda bala]</A>\n";
+
+	}
+
+	function inMidAction() {
+		return isset($_REQUEST['mid_action']);
 	}
 }
 
