@@ -42,6 +42,36 @@ class Product {
 	public $owner;
 }
 
+class Cart {
+	public $items = Array();
+
+	function addItem($id) {
+		if (!$this->hasItem($id))
+			array_push($this->items, $id);
+	}
+
+	function getItems() {
+		return $this->items;
+	}
+
+	function getItemCount() {
+		return count($this->items);
+	}
+
+	function removeItem($id) {
+		if (($key = array_search($id, $this->items)) !== FALSE) {
+			unset($this->items[$key]);
+			return TRUE;
+		}
+		else
+			return FALSE;
+	}
+
+	function hasItem($id) {
+		return in_array($id, $this->items);
+	}
+}
+
 class DataBase {
 	public $pdo;
 
@@ -98,7 +128,7 @@ class DataBase {
 
 class EulojaBase extends DataBase {
 	function __construct() {
-		$this->pdo = new PDO('sqlite:euloja.sqlite');
+		$this->pdo = new PDO('sqlite:dbase.sqlite');
 		$this->createTable('Users', array_keys(get_class_vars('User')));
 		$this->createTable('Products', array_keys(get_class_vars('Product')));
 
@@ -119,7 +149,7 @@ class EulojaBase extends DataBase {
 
 	function findProductById($id) {
 		$query = $this->pdo->prepare('SELECT * from Products where id = :id');
-		$query->execute(Array(':id', $id));
+		$query->execute(Array(':id' => $id));
 		return $query->fetchObject('Product');
 	}
 
@@ -140,6 +170,11 @@ class EulojaBase extends DataBase {
 
 class Session {
 	public $userEmail;
+	public $cart;
+
+	function __construct() {
+		$this->cart = new Cart();
+	}
 }
 
 class MainController {
@@ -164,6 +199,9 @@ class MainController {
 			$action = $_REQUEST['action'];
 		else
 			$action = 'home';
+
+		// Take this away later.
+		echo "<A HREF='loucamente.php'>Home</A><BR>\n";
 
 		// Check for a pending login action.
 		switch ($loginAction) {
@@ -205,6 +243,16 @@ class MainController {
 				$searchProduct->act();
 				break;
 
+			case 'viewProduct':
+				$viewProduct = new ViewProductController($this->dbase, $this->session, $_REQUEST['id']);
+				$viewProduct->act();
+				break;
+
+			case 'finishShopping':
+				$finishShopping = new FinishShoppingController($this->dbase, $this->session);
+				$finishShopping->act();
+				break;
+
 			case 'dumpAllTables':
 				### DEBUG!!
 				echo "<PRE>";
@@ -237,9 +285,10 @@ class MainController {
 				<LI><A HREF="loucamente.php?action=addUser">Adicionar usuário</A>
 				<LI><A HREF="loucamente.php?action=addProduct&amp;loginAction=login">Adicionar produto</A>
 				<LI><A HREF="loucamente.php?action=searchProduct">Pesquisar produtos</A>
+				<LI><A HREF="loucamente.php?action=finishShopping&amp;loginAction=login">Encerrar compras</A>
 				<LI><A HREF="loucamente.php?action=dumpAllTables">Dump all tables (DEBUG)</A>
-				<LI><A HREF="loucamente.php?action=home&loginAction=login">Login</A>
-				<LI><A HREF="loucamente.php?action=home&loginAction=logout">Logout</A>
+				<LI><A HREF="loucamente.php?action=home&amp;loginAction=login">Login</A>
+				<LI><A HREF="loucamente.php?action=home&amp;loginAction=logout">Logout</A>
 			</UL>
 		<?php
 	}
@@ -277,11 +326,13 @@ class Attribute {
 class UIForm {
 	public $attributes = Array();
 	public $action;
+	public $method = 'POST';
 	public $errors = Array();
+	public $actionSuffix = "";
 
 	function __construct() {
 		$this->action = $_SERVER['REQUEST_URI'];  // Half-bad.
-		$this->action .= "&mid_action=1";         // Full-bad.
+		$this->action .= $this->actionSuffix;     // Full-bad.
 	}
 
 	function inMidAction() {
@@ -304,7 +355,7 @@ class UIForm {
 	}
 
 	function printHTML() {
-		echo "<FORM ACTION='{$this->action}' METHOD='POST'>\n";
+		echo "<FORM ACTION='{$this->action}' METHOD='{$this->method}'>\n";
 		echo "<TABLE>\n";
 
 		foreach ($this->errors as $error) {
@@ -393,7 +444,9 @@ class AddUserForm extends UIForm {
 	public $errorStatus;
 
 	function __construct() {
+		$this->actionSuffix = '&amp;mid_action=1';
 		parent::__construct();
+
 		$this->addAttribute(new Attribute('name', "Nome completo", 'text', TRUE));
 		$this->addAttribute(new Attribute('cpf', "CPF", 'text', TRUE));
 		$this->addAttribute(new Attribute('email', "E-mail", 'text', TRUE));
@@ -515,6 +568,7 @@ class AddProductController {
 
 class AddProductForm extends UIForm {
 	function __construct() {
+		$this->actionSuffix = '&amp;mid_action=1';
 		parent::__construct();
 
 		$this->addAttribute(new Attribute('title', "Título", 'text', TRUE));
@@ -596,14 +650,33 @@ class SearchProductController {
 	}
 
 	function showResults($query) {
-		echo "<PRE>";
-		print_r($query->fetchAll());
-		echo "</PRE>";
+		// TODO: Currently this fetches the whole results every time
+		// (which would be bad if we paginated the results).
+
+		$itemCount = 0;
+
+		echo "<TABLE>\n";
+		echo "<TR CLASS='titleRow'><TH>Título<TH>Autor<TH>Preço\n";
+
+		while ($product = $query->fetchObject('Product')) {
+			$itemCount++;
+			echo "<TR CLASS='" . ($itemCount%2? 'oddRow' : 'evenRow') . "'>\n"
+			   . "<TD><A HREF='loucamente.php?action=viewProduct&amp;id={$product->id}'>"
+			   . htmlspecialchars($product->title) . "</A>"
+			   . "<TD>" . htmlspecialchars($product->author)
+			   . "<TD>" . htmlspecialchars($product->price) . "\n";
+		}
+		echo "</TABLE>\n";
+
+		if ($itemCount == 0) {
+			echo "<P>Yo no lo conozco, señor!\n";
+		}
 	}
 }
 
 class SearchProductForm extends UIForm {
 	function __construct() {
+		$this->actionSuffix = '&amp;mid_action=1';
 		parent::__construct();
 		$this->addAttribute(new Attribute('title', "Título", 'text'));
 		$this->addAttribute(new Attribute('author', "Autor", 'text'));
@@ -617,6 +690,109 @@ class SearchProductForm extends UIForm {
 
 }
 
+class ViewProductController {
+	public $session;
+	public $dbase;
+	public $id;
+	public $ui;
+	public $product;
+
+	function __construct($dbase, $session, $id) {
+		$this->dbase = $dbase;
+		$this->session = $session;
+		$this->id = $id;
+
+		$this->product = $dbase->findProductById($id);
+		if (!$this->product) {
+			echo "Fail! ($id)\n";
+		}
+
+		$this->ui = new ViewProductUI($this->product);
+	}
+
+	function act() {
+		if ($this->ui->cartAction() == 'add') {
+			$this->session->cart->addItem($this->id);
+		}
+		else if ($this->ui->cartAction() == 'remove') {
+			$this->session->cart->removeItem($this->id);
+		}
+
+		// DEBUG
+		echo "Hay " . $this->session->cart->getItemCount() . " itens nel carriño.\n";
+		print_r($this->session->cart->getItems());
+
+		$this->ui->inCart = $this->session->cart->hasItem($this->id);
+
+		$this->ui->printHTML();
+	}
+}
+
+class ViewProductUI {
+	// This is not a form! (Or a pipe, for instance.)
+	public $product;
+	public $inCart;
+
+	function __construct($product, $inCart=FALSE) {
+		$this->product = $product;
+		$this->inCart = $inCart;
+	}
+
+	function printHTML() {
+		echo "<PRE>\n";
+		print_r($this->product);
+		echo "</PRE>\n";
+
+		if (!$this->inCart)
+			echo "<P><A HREF='$_SERVER[REQUEST_URI]&amp;cart=add'>[Añade al carriño]</A>";
+		else
+			echo "<P><A HREF='$_SERVER[REQUEST_URI]&amp;cart=remove'>[Remueve del carriño]</A>";
+	}
+
+	function cartAction() {
+		if (isset($_REQUEST['cart']))
+			return $_REQUEST['cart'];
+		else
+			return NULL;
+	}
+}
+
+class FinishShoppingController {
+	public $dbase;
+	public $session;
+
+	function __construct($dbase, $session) {
+		$this->dbase = $dbase;
+		$this->session = $session;
+		$this->ui = new FinishShoppingUI();
+	}
+
+	function act() {
+		foreach ($this->session->cart->getItems() as $id) {
+			$product = $this->dbase->findProductById($id);
+			$this->ui->products[] = $product;
+		}
+
+
+		$this->ui->printHTML();
+	}
+}
+
+class FinishShoppingUI {
+	public $products;
+
+	function printHTML() {
+		echo "Camarada, tu escolheste os seguintes produtos:\n";
+		echo "<UL>\n";
+
+		foreach ($this->products as $product) {
+			echo "<LI><A HREF='loucamente.php?action=viewProduct&amp;id={$product->id}'>" . htmlspecialchars($product->title) . "</A>\n";
+		}
+
+		echo "</UL>\n";
+		echo "<P>[Inserte formulário com opções de pagamento aquí]\n";
+	}
+}
 
 ?>
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
@@ -624,6 +800,7 @@ class SearchProductForm extends UIForm {
 <HEAD>
 	<META HTTP-EQUIV="Content-type" CONTENT="text/html; charset=UTF-8">
 	<TITLE>Euloja</TITLE>
+	<LINK REL="stylesheet" TYPE="text/css" HREF="euloja.css">
 </HEAD>
 <BODY>
 <?php
