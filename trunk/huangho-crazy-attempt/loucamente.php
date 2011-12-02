@@ -46,8 +46,24 @@ class DataBase {
 	public $pdo;
 
 	function createTable($name, $attributes) {
-		// TODO: Set primary key.
-		$cmd = "CREATE TABLE $name (" . implode(",", $attributes) . ")";
+		// [TODO: Set primary key.]
+		// DONE, in the most gambiarrous way.
+
+		$cmd = "CREATE TABLE $name (";
+		
+		if (($idpos = array_search("id", $attributes)) !== FALSE) {
+			$cmd .= "id integer primary key";
+			unset($attributes[$idpos]);
+		}
+		else {
+			$cmd .= $attributes[0] . " primary key";
+			array_shift($attributes);
+		}
+
+		foreach ($attributes as $attr)
+			$cmd .= ", $attr";
+
+		$cmd .=  ")";
 		$this->pdo->exec($cmd);
 	}
 
@@ -56,16 +72,18 @@ class DataBase {
 		$keys = Array();
 		$values = Array();
 		foreach (get_object_vars($object) as $key => $value) {
-			array_push($keys, $key);
-			array_push($colon_keys, ":$key");
-			$values[":$key"] = $value;
+			if ($value !== NULL) {
+				array_push($keys, $key);
+				array_push($colon_keys, ":$key");
+				$values[":$key"] = $value;
+			}
 		}
 
 		$query = $this->pdo->prepare("INSERT INTO $table (" . implode(",", $keys) . ") VALUES (" . implode(",", $colon_keys) . ")");
 		print_r($this->pdo->errorInfo());
 		$query->execute($values);
 		print_r($this->pdo->errorInfo());
-		return TRUE;
+		return $this->pdo->lastInsertId();
 	}
 
 	function dumpTable($table) {
@@ -97,6 +115,12 @@ class EulojaBase extends DataBase {
 		$query = $this->pdo->prepare('SELECT * from Users where cpf = :cpf');
 		$query->execute(Array(':cpf' => $cpf));
 		return $query->fetchObject('User');
+	}
+
+	function findProductById($id) {
+		$query = $this->pdo->prepare('SELECT * from Products where id = :id');
+		$query->execute(Array(':id', $id));
+		return $query->fetchObject('Product');
 	}
 
 	function addUser($user) {
@@ -176,6 +200,11 @@ class MainController {
 				$addProduct->act();
 				break;
 
+			case 'searchProduct':
+				$searchProduct = new SearchProductController($this->dbase, $this->session);
+				$searchProduct->act();
+				break;
+
 			case 'dumpAllTables':
 				### DEBUG!!
 				echo "<PRE>";
@@ -207,6 +236,7 @@ class MainController {
 			<UL>
 				<LI><A HREF="loucamente.php?action=addUser">Adicionar usuário</A>
 				<LI><A HREF="loucamente.php?action=addProduct&amp;loginAction=login">Adicionar produto</A>
+				<LI><A HREF="loucamente.php?action=searchProduct">Pesquisar produtos</A>
 				<LI><A HREF="loucamente.php?action=dumpAllTables">Dump all tables (DEBUG)</A>
 				<LI><A HREF="loucamente.php?action=home&loginAction=login">Login</A>
 				<LI><A HREF="loucamente.php?action=home&loginAction=logout">Logout</A>
@@ -251,6 +281,11 @@ class UIForm {
 
 	function __construct() {
 		$this->action = $_SERVER['REQUEST_URI'];  // Half-bad.
+		$this->action .= "&mid_action=1";         // Full-bad.
+	}
+
+	function inMidAction() {
+		return isset($_REQUEST['mid_action']);
 	}
 
 	function addAttribute($attr) {
@@ -359,7 +394,6 @@ class AddUserForm extends UIForm {
 
 	function __construct() {
 		parent::__construct();
-		$this->action .= "&mid_action=1"; // This is just horrible.
 		$this->addAttribute(new Attribute('name', "Nome completo", 'text', TRUE));
 		$this->addAttribute(new Attribute('cpf', "CPF", 'text', TRUE));
 		$this->addAttribute(new Attribute('email', "E-mail", 'text', TRUE));
@@ -376,9 +410,6 @@ class AddUserForm extends UIForm {
 		parent::printHTML();
 	}
 
-	function inMidAction() {
-		return isset($_REQUEST['mid_action']);
-	}
 }
 
 class AddUserController {
@@ -465,8 +496,8 @@ class AddProductController {
 
 				$product->owner = $this->session->userEmail;
 
-				if ($this->dbase->addProduct($product)) {
-					echo "<P>Yay! <A HREF='loucamente.php?action=home'>Home</A>";
+				if ($id = $this->dbase->addProduct($product)) {
+					echo "<P>Yay! (product id $id) <A HREF='loucamente.php?action=home'>Home</A>";
 					return TRUE;
 				}
 				else {
@@ -485,7 +516,6 @@ class AddProductController {
 class AddProductForm extends UIForm {
 	function __construct() {
 		parent::__construct();
-		$this->action .= "&mid_action=1"; // This is just horrible. Again.
 
 		$this->addAttribute(new Attribute('title', "Título", 'text', TRUE));
 		$this->addAttribute(new Attribute('author', "Autor", 'text', TRUE));
@@ -503,10 +533,85 @@ class AddProductForm extends UIForm {
 		$this->addAttribute(new Attribute('notes', "Notas", 'text', FALSE));
 	}
 
-	function inMidAction() {
-		return isset($_REQUEST['mid_action']);
+}
+
+class SearchProductController {
+	public $ui;
+	public $dbase;
+	public $session;
+
+	function __construct($dbase, $session) {
+		$this->ui = new SearchProductForm();
+		$this->dbase = $dbase;
+		$this->session = $session;
+	}
+
+	function act() {
+		if ($this->ui->inMidAction()) {
+			$queryArgs = Array();
+			$author = $this->ui->getAttributeValue('author');
+			$priceLowerBound = $this->ui->getAttributeValue('priceLowerBound');
+			$priceUpperBound = $this->ui->getAttributeValue('priceUpperBound');
+
+			$queryText = 'SELECT * FROM Products ';
+			$constraints = Array();
+
+			if ($title = $this->ui->getAttributeValue('title')) {
+				$constraints[] = 'title LIKE :title';
+				$queryArgs[':title'] = "%$title%"; // TODO: escape wildchars (lamentável)
+			}
+
+			if ($author = $this->ui->getAttributeValue('author')) {
+				$constraints[] = 'author LIKE :author';
+				$queryArgs[':author'] = "%$author%";  // TODO: escape wildchars (lamentável)
+			}
+
+			if ($priceLowerBound = $this->ui->getAttributeValue('priceLowerBound')) {
+				// GAMBIARRA; should set column type to numeric, instead of casting.
+				$constraints[] = 'cast(price as float) >= cast(:priceLowerBound as float)';
+				$queryArgs[':priceLowerBound'] = $priceLowerBound;
+			}
+
+			if ($priceUpperBound = $this->ui->getAttributeValue('priceUpperBound')) {
+				// GAMBIARRA; should set column type to numeric, instead of casting.
+				$constraints[] = 'cast(price as float) <= cast(:priceUpperBound as float)';
+				$queryArgs[':priceUpperBound'] = $priceUpperBound;
+			}
+
+			if ($constraints)
+				$queryText .= 'where ' . implode(" AND ", $constraints);
+
+			echo "$queryText\n";
+			$query = $this->dbase->pdo->prepare($queryText);
+			if (!$query)
+				print_r($this->dbase->pdo->errorInfo());
+			$query->execute($queryArgs);
+			echo "<PRE>";
+			print_r($query->fetchAll());
+			echo "</PRE>";
+
+		}
+		else {
+			$this->ui->printHTML();
+		}
 	}
 }
+
+class SearchProductForm extends UIForm {
+	function __construct() {
+		parent::__construct();
+		$this->addAttribute(new Attribute('title', "Título", 'text'));
+		$this->addAttribute(new Attribute('author', "Autor", 'text'));
+		$this->addAttribute(new Attribute('priceLowerBound', "Preço>=", 'text'));
+		$this->addAttribute(new Attribute('priceUpperBound', "Preço<=", 'text'));
+	}
+
+	#function printHTML() {
+	#	
+	#}
+
+}
+
 
 ?>
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
