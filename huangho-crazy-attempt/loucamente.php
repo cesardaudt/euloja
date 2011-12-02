@@ -509,7 +509,7 @@ class AddProductController {
 	}
 
 	function validate() {
-		return TRUE;
+		return $this->ui->checkMandatory();
 	}
 }
 
@@ -536,43 +536,43 @@ class AddProductForm extends UIForm {
 }
 
 class SearchProductController {
-	public $ui;
+	public $form;
 	public $dbase;
 	public $session;
 
 	function __construct($dbase, $session) {
-		$this->ui = new SearchProductForm();
+		$this->form = new SearchProductForm();
 		$this->dbase = $dbase;
 		$this->session = $session;
 	}
 
 	function act() {
-		if ($this->ui->inMidAction()) {
+		if ($this->form->inMidAction()) {
 			$queryArgs = Array();
-			$author = $this->ui->getAttributeValue('author');
-			$priceLowerBound = $this->ui->getAttributeValue('priceLowerBound');
-			$priceUpperBound = $this->ui->getAttributeValue('priceUpperBound');
+			$author = $this->form->getAttributeValue('author');
+			$priceLowerBound = $this->form->getAttributeValue('priceLowerBound');
+			$priceUpperBound = $this->form->getAttributeValue('priceUpperBound');
 
 			$queryText = 'SELECT * FROM Products ';
 			$constraints = Array();
 
-			if ($title = $this->ui->getAttributeValue('title')) {
+			if ($title = $this->form->getAttributeValue('title')) {
 				$constraints[] = 'title LIKE :title';
 				$queryArgs[':title'] = "%$title%"; // TODO: escape wildchars (lamentável)
 			}
 
-			if ($author = $this->ui->getAttributeValue('author')) {
+			if ($author = $this->form->getAttributeValue('author')) {
 				$constraints[] = 'author LIKE :author';
 				$queryArgs[':author'] = "%$author%";  // TODO: escape wildchars (lamentável)
 			}
 
-			if ($priceLowerBound = $this->ui->getAttributeValue('priceLowerBound')) {
+			if ($priceLowerBound = $this->form->getAttributeValue('priceLowerBound')) {
 				// GAMBIARRA; should set column type to numeric, instead of casting.
 				$constraints[] = 'cast(price as float) >= cast(:priceLowerBound as float)';
 				$queryArgs[':priceLowerBound'] = $priceLowerBound;
 			}
 
-			if ($priceUpperBound = $this->ui->getAttributeValue('priceUpperBound')) {
+			if ($priceUpperBound = $this->form->getAttributeValue('priceUpperBound')) {
 				// GAMBIARRA; should set column type to numeric, instead of casting.
 				$constraints[] = 'cast(price as float) <= cast(:priceUpperBound as float)';
 				$queryArgs[':priceUpperBound'] = $priceUpperBound;
@@ -586,14 +586,19 @@ class SearchProductController {
 			if (!$query)
 				print_r($this->dbase->pdo->errorInfo());
 			$query->execute($queryArgs);
-			echo "<PRE>";
-			print_r($query->fetchAll());
-			echo "</PRE>";
+
+			$this->showResults($query);
 
 		}
 		else {
-			$this->ui->printHTML();
+			$this->form->printHTML();
 		}
+	}
+
+	function showResults($query) {
+		echo "<PRE>";
+		print_r($query->fetchAll());
+		echo "</PRE>";
 	}
 }
 
