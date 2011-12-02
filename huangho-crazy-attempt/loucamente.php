@@ -83,9 +83,11 @@ class Order {
 	public $buyerId;
 	public $time;
 
-	function __construct($buyerId, $time) {
-		$this->buyerId = $buyerId;
-		$this->time = $time;
+	function __construct($buyerId=NULL, $time=NULL) {
+		if (func_num_args() > 0) {
+			$this->buyerId = $buyerId;
+			$this->time = $time;
+		}
 	}
 }
 
@@ -96,10 +98,12 @@ class Transaction {
 	public $orderId;
 	public $status;    # waitingPayment, waitingShipment, waitingConfirmation, concluded
 
-	function __construct($productId, $orderId, $status) {
-		$this->productId = $productId;
-		$this->orderId = $orderId;
-		$this->status = $status;
+	function __construct($productId=NULL, $orderId=NULL, $status=NULL) {
+		if (func_num_args() > 0) {
+			$this->productId = $productId;
+			$this->orderId = $orderId;
+			$this->status = $status;
+		}
 	}
 }
 
@@ -185,6 +189,18 @@ class EulojaBase extends DataBase {
 		$query = $this->pdo->prepare('SELECT * from Products where id = :id');
 		$query->execute(Array(':id' => $id));
 		return $query->fetchObject('Product');
+	}
+
+	function queryOrdersByUser($userEmail) {
+		$query = $this->pdo->prepare('SELECT * from Orders where buyerId = :id');
+		$query->execute(Array(':id' => $userEmail));
+		return $query;  // Hrrgh.
+	}
+
+	function queryTransactionsByOrder($orderId) {
+		$query = $this->pdo->prepare('SELECT * from Transactions where orderId = :id');
+		$query->execute(Array(':id' => $orderId));
+		return $query;
 	}
 
 	function addUser($user) {
@@ -295,6 +311,11 @@ class MainController {
 				$finishShopping->act();
 				break;
 
+			case 'viewOrders':
+				$viewOrders = new ViewOrdersController($this->dbase, $this->session);
+				$viewOrders->act();
+				break;
+
 			case 'dumpAllTables':
 				### DEBUG!!
 				echo "<PRE>";
@@ -332,6 +353,7 @@ class MainController {
 				<LI><A HREF="loucamente.php?action=addProduct&amp;loginAction=login">Adicionar produto</A>
 				<LI><A HREF="loucamente.php?action=searchProduct">Pesquisar produtos</A>
 				<LI><A HREF="loucamente.php?action=finishShopping&amp;loginAction=login">Encerrar compras</A>
+				<LI><A HREF="loucamente.php?action=viewOrders&amp;loginAction=login">Ver pedidos</A>
 				<LI><A HREF="loucamente.php?action=dumpAllTables">Dump all tables (DEBUG)</A>
 				<LI><A HREF="loucamente.php?action=home&amp;loginAction=login">Login</A>
 				<LI><A HREF="loucamente.php?action=home&amp;loginAction=logout">Logout</A>
@@ -358,7 +380,7 @@ class Attribute {
 
 		# Questionable.
 		if (isset($_REQUEST[$key]))
-			$this->value = unquote($_REQUEST[$key]);
+			$this->value = unquote($_REQUEST[$key]); // Grab current value from HTTP request.
 		else
 			$this->value = $this->defaultValue;
 	}
@@ -860,6 +882,45 @@ class FinishShoppingUI {
 
 	function inMidAction() {
 		return isset($_REQUEST['mid_action']);
+	}
+}
+
+class ViewOrdersController {
+	public $dbase;
+	public $session;
+
+	function __construct($dbase, $session) {
+		$this->dbase = $dbase;
+		$this->session = $session;
+		$this->ui = new ViewOrdersUI();
+	}
+
+	function act() {
+		$orderQuery = $this->dbase->queryOrdersByUser($this->session->userEmail);
+
+		// This should be in the UI. And it should be decent.
+
+		while ($order = $orderQuery->fetchObject('Order')) {
+			echo "<H3>Order {$order->id}</H3>";
+			$transactionQuery = $this->dbase->queryTransactionsByOrder($order->id);
+			while ($transaction = $transactionQuery->fetchObject('Transaction')) {
+				echo "<PRE>";
+				print_r($transaction);
+				echo "</PRE>\n";
+			}
+		}
+
+		//echo "<PRE>\n";
+		//print_r($query->fetchAll());
+		//echo "</PRE>\n";
+
+		$this->ui->printHTML();
+	}
+}
+
+class ViewOrdersUI {
+	function printHTML() {
+		echo "Hello, sailor!\n";
 	}
 }
 
