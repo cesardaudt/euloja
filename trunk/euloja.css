@@ -1,0 +1,4 @@
+.oddRow { background: #E0E0FF; }
+.evenRow { background: #FFFFFF; }
+.titleRow { background: #D0D0D0; }
+th { text-align: left; }
